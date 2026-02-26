@@ -7,7 +7,8 @@ DASHES = "-\u2010\u2011\u2013\u2014\u2212"  # -, -,
 PO_RE = re.compile(r"PO\s*#\s*(\d+)", re.IGNORECASE)
 # ITEM_RE = re.compile(r"\bQty\s+(\d+)\s+([A-Z0-9\-]+)\b", re.IGNORECASE)
 # ITEM_RE = re.compile(r"^\s*(\d+)\s+[A-Z]-\s+([A-Z0-9]+)", re.MULTILINE)
-ITEM_RE = re.compile(r"^\s*(\d+)\s+[A-Z]-\s+([A-Z0-9]+)")
+# ITEM_RE = re.compile(r"^\s*(\d+)\s+[A-Z]-\s+([A-Z0-9]+)")
+ITEM_RE = re.compile(r"^\s*(\d+)\s+[A-Z]?\s*([A-Z0-9]+)\s+(.+?)\s*$", re.MULTILINE)
 
 
 def extract_po(page_text: str) -> str | None:
@@ -48,45 +49,56 @@ def extract_po(page_text: str) -> str | None:
 
 
 def extract_items(page_text):
+    # lines = page_text.splitlines()
+    # for s in (ln.strip() for ln in lines):
+    # if not s:
+    # continue
+    # if any(k in s.lower() for k in ("shipped to", "ordered from", "authorized by", "ref #", "page", "po #")):
+    # continue
+    # if re.fullmatch(r"[xX\-\.\s]{10,}\d{2,}[xX\-\.\s]{5.}", s):
+    # continue
+    # if re.match(r"^\d+\s", s):
+    # print("CANIDATE:", s)
     rows = []
-    text = page_text or ""
-    for d in DASHES[1:]:
-        text = text.replace(d, "-")
-    print("chars:", len(text))
+    # text = page_text or ""
+    # for d in DASHES[1:]:
+    # text = text.replace(d, "-")
+    # print("chars:", len(text))
     # show any lines that look like they contain an item code fragment
-    hits = []
-    for ln in text.splitlines():
-        s = ln.strip()
-        if not s:
-            continue
-        if "A" in s and "-" in s:  # crude filter
-            hits.append(s)
+    # hits = []
+    # for ln in text.splitlines():
+    # s = ln.strip()
+    # if not s:
+    # continue
+    # if "A" in s and "-" in s:  # crude filter
+    # hits.append(s)
 
-    print("lines with A and - :", len(hits))
-    for s in hits[:20]:
-        print("HIT:", s)
-    matches = list(ITEM_RE.finditer(text))
-    print(f"ITEM matches: {len(matches)}")
-    for m in matches[:5]:
-        print("MATCH", m.group(1), m.group(2))
-    for m in matches:
-        qty = int(m.group(1))
-        part = m.group(2).strip()
-        desc = m.group(3) or "".strip
+    # print("lines with A and - :", len(hits))
+    # for s in hits[:20]:
+    # print("HIT:", s)
+    # matches = list(ITEM_RE.finditer(text))
+    # print(f"ITEM matches: {len(matches)}")
+    # for m in matches[:5]:
+    # print("MATCH", m.group(1), m.group(2))
+    # for m in matches:
+    # qty = int(m.group(1))
+    # part = m.group(2).strip()
+    # desc = m.group(3) or "".strip
     for m in ITEM_RE.finditer(page_text or ""):
         qty = int(m.group(1))
         part = m.group(2).strip()
-        desc = ""
+        desc = m.group(3).strip()
         # optional keep a little description if it exists (can remove if noisy)
-        part_display = part  # f"{part} ({desc})" if desc else part
+        # part_display = part  # f"{part} ({desc})" if desc else part
         rows.append(
             {
                 "Amount": qty,
-                "Type": "",  # manual fill
+                # "Type": "",  # manual fill
                 "Part #": part,
-                "P.O. Number": "",  # filled later per page
-                "Notes": "",
-                "Boxes/PC": "",
+                "Description": desc,
+                # "P.O. Number": "",  # filled later per page
+                # "Notes": "",
+                # "Boxes/PC": "",
             }
         )
     return rows
@@ -134,6 +146,8 @@ def main() -> None:
             # print(text[:1000])
             # print("======================================\n")
             items = extract_items(text)
+            for r in items:
+                all_rows.append(r)
             po = extract_po(text)
             for r in items:
                 r["P.O. Number"] = po or ""
