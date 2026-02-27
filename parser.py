@@ -161,7 +161,7 @@ def main():
             for r in items:
                 r["P.O. Number"] = po
             all_rows.extend(items)
-    write_output(all_rows, pdf_path.stem + "_outputxlsx")
+    write_output(all_rows, pdf_path.stem + "_output.xlsx")
 
    
 
