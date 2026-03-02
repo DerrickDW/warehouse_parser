@@ -1,0 +1,53 @@
+# -----------------------------
+# Python
+# -----------------------------
+__pycache__/
+*.py[cod]
+*$py.class
+
+# Virtual environments
+.venv/
+venv/
+env/
+ENV/
+
+# Distribution / packaging
+build/
+dist/
+*.egg-info/
+
+# -----------------------------
+# IDE / Editor
+# -----------------------------
+.vscode/
+.idea/
+*.swp
+*.swo
+
+# -----------------------------
+# OS Files
+# -----------------------------
+.DS_Store
+Thumbs.db
+
+# -----------------------------
+# Logs
+# -----------------------------
+*.log
+
+# -----------------------------
+# Local data (important)
+# -----------------------------
+*.pdf
+*.xlsx
+*_output.xlsx
+
+# If you want to keep sample test PDFs, create:
+# /samples/
+# and remove the *.pdf ignore above.
+
+# -----------------------------
+# Temp / scratch files
+# -----------------------------
+*.tmp
+*.bak
