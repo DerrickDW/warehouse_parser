@@ -130,7 +130,7 @@ def extract_items(page_text: str):
         return rows
 
     for line in page_text.splitlines():
-        # optional: skip header line
+        # skip header line
         if "qty" in line.lower() and "line/item" in line.lower():
             continue
 
@@ -141,16 +141,12 @@ def extract_items(page_text: str):
         qty = int(m.group("qty"))
 
         item_raw = m.group("item")
-        #if DEBUG and ("211017" in item_raw):
-            #print("RAW TOKEN REPR:", repr(item_raw))
-
         item = normalize_item_token(item_raw)
 
-        #if DEBUG and ("211017" in item):
-            #print("NORM TOKEN REPR:", repr(item))
-
         desc = clean_desc((m.group("desc") or "").strip())
+
         part = f"A-{item}"
+        part_display = f"{part} ({desc})" if desc else part
 
         if DEBUG:
             print("ITEM:", qty, part, "|", desc)
@@ -159,15 +155,14 @@ def extract_items(page_text: str):
             {
                 "Amount": qty,
                 "Type": "",
-                "Part #": part,       # keep clean part number
+                "Part #": part_display,   # A-XXXX (DESC)
                 "P.O. Number": "",
-                "Notes": desc,        # part name / description goes here
+                "Notes": "",              # blank
                 "Boxes/PC": "",
             }
         )
 
     return rows
-
 
 def write_output(rows, filename):
     wb = Workbook()
