@@ -9,13 +9,13 @@ if DEBUG:
     print("🐒 systems stable")
 
 # --- PO ---
-PO_RE = re.compile(r"PO\s*#\s*(\d+)", re.IGNORECASE)
+PO_RE = re.compile(r"\bPO\s*#?\s*(\d+)\b", re.IGNORECASE)
 
-def extract_po(page_text: str) -> str | None:
+def extract_po(page_text: str) -> str:
     if not page_text:
-        return None
+        return ""
     m = PO_RE.search(page_text)
-    return m.group(1) if m else None
+    return m.group(1) if m else ""
 
 
 # --- Items ---
@@ -151,17 +151,26 @@ def main():
         #path = "China 141.26.pdf"
         #path = str(Path(path).expanduser())
     all_rows = []
-
+    
+    #TEMP LOOOP
     with pdfplumber.open(pdf_path) as pdf:
-        for page in pdf.pages:
+        for i, page in enumerate(pdf.pages):
             text = page.extract_text() or ""
-            po = extract_po(text) or ""
+            print(f"\n--- PAGE {i+1} RAW TEXT ---\n")
+            print(text)
+            print("\n--- END PAGE ---\n")
+            break  # just first page for now
 
-            items = extract_items(text)
-            for r in items:
-                r["P.O. Number"] = po
-            all_rows.extend(items)
-    write_output(all_rows, pdf_path.stem + "_output.xlsx")
+    #with pdfplumber.open(pdf_path) as pdf:
+        #for page in pdf.pages:
+            #text = page.extract_text() or ""
+            #po = extract_po(text) or ""
+
+            #items = extract_items(text)
+            #for r in items:
+                #r["P.O. Number"] = po
+            #all_rows.extend(items)
+    #write_output(all_rows, pdf_path.stem + "_output.xlsx")
 
    
 
