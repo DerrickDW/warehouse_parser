@@ -30,7 +30,7 @@ Clean .xlsx file using openpyxl
 
 CLI usage:
 
-python parser1.py <pdf_path>
+python parser.py <pdf_path>
 📂 Example
 
 Input line (raw PDF):
@@ -60,7 +60,7 @@ source .venv/bin/activate
 3. Install dependencies
 pip install -r requirements.txt
 📋 Usage
-python parser1.py "path/to/ReceivingPO.pdf"
+python parser.py "path/to/ReceivingPO.pdf"
 
 Output:
 
