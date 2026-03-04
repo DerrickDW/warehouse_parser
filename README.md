@@ -1,3 +1,6 @@
+![Python](https://img.shields.io/badge/python-3.x-blue)
+![License](https://img.shields.io/badge/license-MIT-green)
+
 📦 Warehouse PDF → Excel Parser
 
 A local-first Python tool that extracts structured item data from warehouse Receiving Purchase Order PDFs and exports clean, audit-ready Excel files.
