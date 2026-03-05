@@ -7,7 +7,7 @@ from openpyxl import Workbook
 import sys
 from pathlib import Path
 
-DEBUG = True
+DEBUG = False
 if DEBUG:
     print("🐒 systems stable")
 
