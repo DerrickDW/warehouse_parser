@@ -1,4 +1,4 @@
-##CHANGELOG
+###CHANGELOG
 
 All notable changes to the Warehouse PDF Parser project will be documented in this file.
 
