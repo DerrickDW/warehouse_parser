@@ -17,6 +17,7 @@ activate
 build/
 dist/
 *.egg-info/
+rules/
 
 # -----------------------------
 # IDE / Editor
