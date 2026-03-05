@@ -111,14 +111,12 @@ Best results come from scanning before documents are written on.
 
 Phase 1 – Core Extraction: ✅ Complete
 Stable extraction for printed warehouse documents.
-
-Future ideas (optional):
-
-CSV rules override layer
+Phase 2:
+CSV rules override layer (SOON)
 
 OCR fallback for image-only PDFs
 
-Historical part duplication detection
+Historical part duplication detection (SOON)
 
 Web UI wrapper
 
