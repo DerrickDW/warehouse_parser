@@ -1,13 +1,13 @@
 ![Python](https://img.shields.io/badge/python-3.x-blue)
 ![License](https://img.shields.io/badge/license-MIT-green)
 
-📦 Warehouse PDF → Excel Parser
+# 📦 Warehouse PDF → Excel Parser
 
 A local-first Python tool that extracts structured item data from warehouse Receiving Purchase Order PDFs and exports clean, audit-ready Excel files.
 
 Designed for printed warehouse documents with consistent formatting.
 
-✅ Features
+## ✅ Features
 
 Extracts:
 
@@ -31,10 +31,12 @@ Outputs:
 
 Clean .xlsx file using openpyxl
 
-CLI usage:
+### CLI usage:
 
+```bash
 python parser.py <pdf_path>
-📂 Example
+```
+## 📂 Example
 
 Input line (raw PDF):
 
@@ -42,9 +44,10 @@ Input line (raw PDF):
 
 Output row:
 
-Amount	Part #	Description	PO
-220	A-R26608	WASHER, PULL ARM FRONT	613938
-🚀 Installation
+| Amount | Part # | Description | PO |
+|------|------|------|------|
+| 220 | A-R26608 | WASHER, PULL ARM FRONT | 613938 |
+## 🚀 Installation
 1. Clone repo
 git clone <repo-url>
 cd warehouse_parser
@@ -62,7 +65,7 @@ Mac/Linux:
 source .venv/bin/activate
 3. Install dependencies
 pip install -r requirements.txt
-📋 Usage
+## 📋 Usage
 python parser.py "path/to/ReceivingPO.pdf"
 
 Output:
@@ -71,7 +74,7 @@ ReceivingPO_output.xlsx
 
 Generated in the same directory as the PDF.
 
-🧠 How It Works
+## 🧠 How It Works
 
 Uses pdfplumber to extract page text.
 
@@ -97,7 +100,7 @@ Right-column Mfg codes
 
 Writes structured rows using openpyxl.
 
-⚠️ Assumptions
+## ⚠️ Assumptions
 
 Only parts starting with A- are valid items.
 
@@ -107,7 +110,7 @@ Handwritten scans are not guaranteed to extract correctly.
 
 Best results come from scanning before documents are written on.
 
-🛠️ Project Status
+## 🛠️ Project Status
 
 Phase 1 – Core Extraction: ✅ Complete
 Stable extraction for printed warehouse documents.
@@ -120,7 +123,7 @@ Historical part duplication detection (SOON)
 
 Web UI wrapper
 
-🔒 Git Policy
+## 🔒 Git Policy
 
 Ignored:
 
@@ -134,13 +137,13 @@ IDE folders
 
 Only source code and config are versioned.
 
-📦 Dependencies
+## 📦 Dependencies
 
 pdfplumber
 
 openpyxl
 
-🏗️ Architecture Philosophy
+## 🏗️ Architecture Philosophy
 
 Local-first
 
