@@ -11,6 +11,7 @@ parser1.py
 venv/
 env/
 ENV/
+activate
 
 # Distribution / packaging
 build/
