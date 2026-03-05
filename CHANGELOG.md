@@ -1,197 +1,175 @@
-###CHANGELOG
+# CHANGELOG
 
 All notable changes to the Warehouse PDF Parser project will be documented in this file.
 
 This project follows a pragmatic versioning model where minor versions represent meaningful improvements to parsing accuracy, rule generation, and validation layers.
 
-##v1.5 — Rule Engine + Validation Layer (Current)
-Added
+---
 
-Part validation system
+## v1.5 — Rule Engine + Validation Layer (Current)
 
-Parser now validates extracted parts against valid_part_numbers.csv.
+### Added
 
-Prevents OCR garbage from silently entering output datasets.
+- **Part validation system**
+  - Parser now validates extracted parts against `valid_part_numbers.csv`
+  - Prevents OCR garbage from silently entering output datasets
 
-Correction mapping system
+- **Correction mapping system**
+  - Added `part_corrections.csv` for deterministic OCR correction rules
+  - Automatically fixes known OCR misreads before validation
 
-Added part_corrections.csv for deterministic OCR correction rules.
+- **Correction audit logging**
+  - Unknown export now records both:
+    - `part_number_before_correction`
+    - `part_number_norm`
+  - Allows verification of correction rule effectiveness
 
-Automatically fixes known OCR misreads before validation.
+- **Unknown parts export**
+  - New `_unknown_parts.csv` output generated per parsed document
+  - Includes:
+    - normalized part
+    - original OCR part
+    - display part
+    - PO number
+    - source PDF
+    - raw OCR line
 
-Correction audit logging
+- **Validation tolerant of A-prefix variations**
+  - Validator now checks both:
+    - `A-12345`
+    - `12345`
 
-Unknown export now records both:
+- **Description cleanup improvements**
+  - Added `DESC_TRAILING_MFGNUM_RE` to remove trailing manufacturer numbers
+  - Improved removal of packaging artifacts (`BOX`, `LABEL`, `PACK`, etc.)
 
-part_number_before_correction
+- **Correction-aware Excel output**
+  - Corrected part numbers now propagate to final Excel output
 
-part_number_norm
+---
 
-Allows verification of correction rule effectiveness.
+## v1.4 — OCR Normalization Improvements
 
-Unknown parts export
+### Added
 
-New _unknown_parts.csv output generated per parsed document.
+- OCR glyph correction logic:
+  - `€ → S`
+  - `$ → S`
+  - `£ → L`
 
-Includes:
+- Automatic fix for leading OCR error:
+  - `8P → BP`
 
-normalized part
+- Internal OCR cleanup handling cases like:
+  - `C€S54816`
+  - `CSS → CS`
 
-original OCR part
+### Improved
 
-display part
+- `normalize_item_token()` expanded to handle common OCR artifacts
+- Reduced incorrect part token extraction
 
-PO number
+---
 
-source PDF
+## v1.3 — Description Parsing Improvements
 
-raw OCR line
+### Added
 
-Validation tolerant of A-prefix variations
+- `clean_desc()` pipeline for description normalization
 
-Validator now checks both:
-
-A-12345
-
-12345
-
-Description cleanup improvements
-
-Added DESC_TRAILING_MFGNUM_RE to remove trailing manufacturer numbers.
-
-Improved removal of packaging artifacts (BOX, LABEL, PACK, etc.).
-
-Correction-aware Excel output
-
-Corrected part numbers now propagate to final Excel output.
-
-##v1.4 — OCR Normalization Improvements
-Added
-
-OCR glyph correction logic:
-
-€ → S
-
-$ → S
-
-£ → L
-
-Automatic fix for leading 8P → BP OCR error.
-
-Internal OCR cleanup handling cases like:
-
-C€S54816
-
-CSS → CS
-
-Improved
-
-normalize_item_token() expanded to handle common OCR artifacts.
-
-Reduced incorrect part token extraction.
-
-##v1.3 — Description Parsing Improvements
-Added
-
-clean_desc() pipeline for description normalization.
-
-Improved
+### Improved
 
 Removal of trailing packaging artifacts:
 
-BOX
+- `BOX`
+- `LABEL`
+- `BAG`
+- `PACK`
+- `CASE QTY`
 
-LABEL
+Also removes OCR bleed tokens and trailing numeric artifacts.
 
-BAG
-
-PACK
-
-CASE QTY
-
-Removal of OCR bleed tokens and trailing numeric artifacts.
-
-Result
+### Result
 
 Significant reduction in garbage description text entering Excel output.
 
-##v1.2 — Robust Part Extraction
-Added
+---
+
+## v1.2 — Robust Part Extraction
+
+### Added
 
 Regex-based item extraction:
-
-```Qty + A- + Line Item```
+Qty + A- + Line Item
 
 Pattern:
+^\s*(qty)\s+A-\s*(item)\s*(description)
 
-```^\s*(qty)\s+A-\s*(item)\s*(description)```
-Improvements
+### Improvements
 
-Reliable parsing of OCR text from NAPS2 PDFs.
+- Reliable parsing of OCR text from NAPS2 PDFs
+- Reduced misidentification of description text as part numbers
 
-Reduced misidentification of description text as part numbers.
+---
 
-##v1.1 — Initial OCR Token Normalization
-Added
+## v1.1 — Initial OCR Token Normalization
 
-Basic token cleanup
+### Added
 
-Whitespace normalization
+- Basic token cleanup
+- Whitespace normalization
+- Hyphen normalization
 
-Hyphen normalization
-
-Improved
+### Improved
 
 Handling of malformed OCR tokens.
 
-##v1.0 — Initial Parser Release
-Features
+---
+
+## v1.0 — Initial Parser Release
+
+### Features
 
 Reads OCR text layer from NAPS2-generated PDFs.
 
 Extracts:
 
-Quantity
-
-Part number
-
-Description
-
-PO number
+- Quantity
+- Part number
+- Description
+- PO number
 
 Outputs structured Excel file with columns:
-
-```Amount
+Amount
 Type
 Part #
 P.O. Number
 Notes
-Boxes/PC```
-##Purpose
+Boxes/PC
+
+### Purpose
 
 Initial prototype for automating warehouse logistics document transcription.
 
-##Planned for v2.0
-Planned Features
+---
 
-Automatic OCR correction inference using historical part dataset.
+## Planned for v2.0
 
-Duplicate part line generation using duplicate_parts_expanded.csv.
+### Planned Features
 
-Intelligent fuzzy correction using valid part corpus.
+- Automatic OCR correction inference using historical part dataset
+- Duplicate part line generation using `duplicate_parts_expanded.csv`
+- Intelligent fuzzy correction using valid part corpus
+- Parser GUI wrapper for drag-and-drop operation
+- Rule mining integration pipeline
 
-Parser GUI wrapper for drag-and-drop operation.
+---
 
-Rule mining integration pipeline.
-
-##Project Goals
+## Project Goals
 
 The parser aims to achieve:
 
-Near-zero manual transcription
-
-Deterministic OCR cleanup
-
-Self-improving rule datasets
-
-High reliability in warehouse logistics workflows
+- Near-zero manual transcription
+- Deterministic OCR cleanup
+- Self-improving rule datasets
+- High reliability in warehouse logistics workflows
