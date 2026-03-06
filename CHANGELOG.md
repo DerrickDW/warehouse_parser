@@ -6,6 +6,9 @@ This project follows a pragmatic versioning model where minor versions represent
 
 ---
 
+## V1.6 Rule Engine Update
+  - Added Rule Update that now adds what was done to the part and updated duplication logic as well as confidence scoring.
+
 ## v1.5 — Rule Engine + Validation Layer (Current)
 
 ### Added
@@ -157,8 +160,6 @@ Initial prototype for automating warehouse logistics document transcription.
 
 ### Planned Features
 
-- Automatic OCR correction inference using historical part dataset
-- Duplicate part line generation using `duplicate_parts_expanded.csv`
 - Intelligent fuzzy correction using valid part corpus
 - Parser GUI wrapper for drag-and-drop operation
 - Rule mining integration pipeline
