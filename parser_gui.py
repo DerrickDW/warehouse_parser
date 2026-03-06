@@ -121,6 +121,7 @@ class MainWindow(QMainWindow):
         self.status_conf_high = QLabel("—")
         self.status_conf_medium = QLabel("—")
         self.status_conf_low = QLabel("—")
+        self.status_desc_overrides = QLabel("—")
         status_layout.addRow("Current PDF:", self.status_pdf)
         status_layout.addRow("Parsed rows:", self.status_rows)
         status_layout.addRow("Unknown parts:", self.status_unknowns)
@@ -129,6 +130,7 @@ class MainWindow(QMainWindow):
         status_layout.addRow("Confidence high:", self.status_conf_high)
         status_layout.addRow("Confidence medium:", self.status_conf_medium)
         status_layout.addRow("Confidence low:", self.status_conf_low)
+        status_layout.addRow("Desc overrides:", self.status_desc_overrides)
         left_layout.addWidget(status_group)
 
         self.log_box = QTextEdit()
@@ -211,6 +213,28 @@ class MainWindow(QMainWindow):
         duplicate_layout.addWidget(self.remove_duplicate_btn)
 
         actions_layout.addWidget(duplicate_group)
+
+        description_group = QGroupBox("Description Override Editor")
+        description_layout = QVBoxLayout(description_group)
+
+        self.description_part_edit = QLineEdit()
+        self.description_part_edit.setPlaceholderText("Part number for description override")
+
+        self.description_override_edit = QLineEdit()
+        self.description_override_edit.setPlaceholderText("Override description text")
+
+        self.save_description_btn = QPushButton("Save description override")
+        self.save_description_btn.clicked.connect(self.save_selected_description_override)
+
+        self.remove_description_btn = QPushButton("Remove description override")
+        self.remove_description_btn.clicked.connect(self.remove_selected_description_override)
+
+        description_layout.addWidget(self.description_part_edit)
+        description_layout.addWidget(self.description_override_edit)
+        description_layout.addWidget(self.save_description_btn)
+        description_layout.addWidget(self.remove_description_btn)
+
+        actions_layout.addWidget(description_group)
         right_layout.addWidget(actions_group)
 
         splitter.addWidget(right)
@@ -366,7 +390,27 @@ class MainWindow(QMainWindow):
         self.status_conf_high.setText(str(int(confidence_counts.get("high", 0))))
         self.status_conf_medium.setText(str(int(confidence_counts.get("medium", 0))))
         self.status_conf_low.setText(str(int(confidence_counts.get("low", 0))))
-            
+        
+
+        try:
+            df = pd.read_csv(self.current_unknown_csv)
+        except Exception as e:
+            self.log(f"Failed reading unknown parts CSV: {e}")
+            self.clear_unknown_details()
+            return
+
+        self.current_unknown_df = df.fillna("")
+        self.status_unknowns.setText(str(len(self.current_unknown_df)))
+
+        for _, row in self.current_unknown_df.iterrows():
+            label = str(row.get("part_number_display") or row.get("part_number_norm") or "(unknown)")
+            item = QListWidgetItem(label)
+            self.unknown_list.addItem(item)
+
+        if len(self.current_unknown_df) > 0:
+            self.unknown_list.setCurrentRow(0)
+        else:
+            self.clear_unknown_details()
 
     def clear_unknown_details(self):
         self.detail_before.clear()
@@ -394,16 +438,21 @@ class MainWindow(QMainWindow):
         self.detail_raw.setPlainText(str(row.get("raw_line", "")))
         self.correction_target_edit.setText(after)
         self.duplicate_part_edit.setText(after)
+        self.description_part_edit.setText(after)
+        self.description_override_edit.setText("")
 
     def refresh_rule_counts(self):
         valid_path = self.rules_dir / "valid_part_numbers.csv"
         corrections_path = self.rules_dir / "part_corrections.csv"
+        desc_overrides_path = self.rules_dir / "description_overrides.csv"
 
         valid_count = self.safe_count_rows(valid_path)
         corrections_count = self.safe_count_rows(corrections_path)
+        desc_override_count = self.safe_count_rows(desc_overrides_path)
 
         self.status_valid.setText(str(valid_count) if valid_count is not None else "missing")
         self.status_corrections.setText(str(corrections_count) if corrections_count is not None else "missing")
+        self.status_desc_overrides.setText(str(desc_override_count) if desc_override_count is not None else "missing")
 
     def safe_count_rows(self, path: Path) -> Optional[int]:
         if not path.exists():
@@ -558,6 +607,72 @@ class MainWindow(QMainWindow):
         df.to_csv(path, index=False)
         self.log(f"Removed manual duplicate rules for: {part_number}")
 
+        self.refresh_rule_counts()
+
+    def save_selected_description_override(self):
+        part_number = self.description_part_edit.text().strip().upper()
+        description_text = self.description_override_edit.text().strip()
+
+        if not part_number:
+            QMessageBox.warning(self, "Missing part", "Select an unknown part or type a part number first.")
+            return
+
+        if not description_text:
+            QMessageBox.warning(self, "Missing description", "Enter description override text first.")
+            return
+
+        path = self.rules_dir / "description_overrides.csv"
+        self.rules_dir.mkdir(parents=True, exist_ok=True)
+
+        if path.exists():
+            df = pd.read_csv(path)
+            required = {"part_number", "description_override"}
+            if not required.issubset(df.columns):
+                QMessageBox.critical(self, "Bad CSV", f"{path.name} must contain part_number,description_override columns.")
+                return
+        else:
+            df = pd.DataFrame(columns=["part_number", "description_override"])
+
+        mask = df["part_number"].astype(str).str.strip().str.upper() == part_number
+        if mask.any():
+            df.loc[mask, "description_override"] = description_text
+            self.log(f"Updated description override: {part_number}")
+        else:
+            df.loc[len(df)] = {"part_number": part_number, "description_override": description_text}
+            self.log(f"Added description override: {part_number}")
+
+        df = df.drop_duplicates(subset=["part_number"], keep="last")
+        df = df.sort_values("part_number")
+        df.to_csv(path, index=False)
+        self.refresh_rule_counts()
+
+    def remove_selected_description_override(self):
+        part_number = self.description_part_edit.text().strip().upper()
+        if not part_number:
+            QMessageBox.warning(self, "Missing part", "Select an unknown part or type a part number first.")
+            return
+
+        path = self.rules_dir / "description_overrides.csv"
+        if not path.exists():
+            self.log("No description_overrides.csv found.")
+            return
+
+        df = pd.read_csv(path)
+        required = {"part_number", "description_override"}
+        if not required.issubset(df.columns):
+            QMessageBox.critical(self, "Bad CSV", f"{path.name} must contain part_number,description_override columns.")
+            return
+
+        before = len(df)
+        df = df[~df["part_number"].astype(str).str.strip().str.upper().eq(part_number)]
+        after = len(df)
+
+        if after == before:
+            self.log(f"No description override found for: {part_number}")
+            return
+
+        df.to_csv(path, index=False)
+        self.log(f"Removed description override: {part_number}")
         self.refresh_rule_counts()
 
 

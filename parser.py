@@ -166,6 +166,29 @@ def load_duplicate_rules(rules_dir: Path) -> dict[str, list[str]]:
     print(f"[OK] Loaded duplicate rules for {len(final_map)} parts")
     return final_map
 
+def load_description_overrides(csv_path: Path) -> dict[str, str]:
+    if not csv_path.exists():
+        print(f"[WARN] description overrides file not found: {csv_path} (description overrides disabled)")
+        return {}
+
+    df = pd.read_csv(csv_path, encoding="utf-8-sig")
+    df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
+
+    required = {"part_number", "description_override"}
+    if not required.issubset(df.columns):
+        print(f"[WARN] {csv_path} must have columns part_number,description_override (description overrides disabled)")
+        return {}
+
+    mapping = {}
+    for _, r in df.iterrows():
+        part = normalize_part_for_validation(r.get("part_number"))
+        desc = str(r.get("description_override") or "").strip()
+        if part and desc:
+            mapping[part] = desc
+
+    print(f"[OK] Loaded {len(mapping)} description overrides from {csv_path}")
+    return mapping
+
 def write_unknown_parts_csv(unknown_rows: list[dict], out_path: Path):
     if not unknown_rows:
         print("[OK] No unknown parts found.")
@@ -205,6 +228,7 @@ def write_correction_audit_csv(audit_rows: list[dict], out_path: Path):
     headers = [
         "part_number_before_correction",
         "part_number_final",
+        "description_final",
         "correction_applied",
         "confidence",
         "confidence_reason",
@@ -304,6 +328,7 @@ def extract_items(
     valid_parts: set[str],
     corrections: dict[str, str],
     duplicate_rules: dict[str, list[str]],
+    description_overrides: dict[str, str],
     unknown_parts: list,
     correction_audit: list,
     po: str,
@@ -336,6 +361,16 @@ def extract_items(
         corrected_part_norm = original_part_norm
         if corrections and corrected_part_norm in corrections:
             corrected_part_norm = corrections[corrected_part_norm]
+        # start with cleaned OCR description
+        final_desc = desc
+        
+        #override description by correct part number, if configured
+        if description_overrides and corrected_part_norm in description_overrides:
+            final_desc = description_overrides[corrected_part_norm]
+        
+        #IMPORTANT: use corrected part for Excel output too
+        part_for_output = corrected_part_norm
+        part_display = f"{part_for_output} ({final_desc})" if final_desc else part_for_output
 
         correction_applied = corrected_part_norm != original_part_norm
 
@@ -358,10 +393,6 @@ def extract_items(
             confidence = "low"
             confidence_reason = "not_in_valid_parts"
 
-        # IMPORTANT: use corrected part for Excel output too (keep description!)
-        part_for_output = corrected_part_norm
-        part_display = f"{part_for_output} ({desc})" if desc else part_for_output
-
         # log unknowns (but still export normal output row)
         if valid_parts and not is_valid:
             unknown_parts.append({
@@ -377,6 +408,7 @@ def extract_items(
         correction_audit.append({
             "part_number_before_correction": original_part_norm,
             "part_number_final": corrected_part_norm,
+            "description_final": final_desc,
             "correction_applied": "yes" if correction_applied else "no",
             "confidence": confidence,
             "confidence_reason": confidence_reason,
@@ -389,7 +421,7 @@ def extract_items(
             print(f"DUPLICATE RULE: {corrected_part_norm} -> {duplicate_rules[corrected_part_norm]}")
 
         if DEBUG:
-            print("ITEM:", qty, part_for_output, "|", desc, "|", confidence, confidence_reason)
+            print("ITEM:", qty, part_for_output, "|", final_desc, "|", confidence, confidence_reason)
 
         output_types = duplicate_rules.get(corrected_part_norm, [])
 
@@ -449,6 +481,7 @@ def main():
     valid_parts = load_valid_parts(rules_dir / "valid_part_numbers.csv")
     corrections = load_part_corrections(rules_dir / "part_corrections.csv")
     duplicate_rules = load_duplicate_rules(rules_dir)
+    description_overrides = load_description_overrides(rules_dir / "description_overrides.csv")
     unknown_parts = []
     correction_audit = []
 
@@ -462,6 +495,7 @@ def main():
                 valid_parts=valid_parts,
                 corrections=corrections,
                 duplicate_rules=duplicate_rules,
+                description_overrides=description_overrides,
                 unknown_parts=unknown_parts,
                 correction_audit=correction_audit,
                 po=po,
