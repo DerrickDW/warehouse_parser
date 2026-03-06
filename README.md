@@ -13,7 +13,9 @@ Extracts:
 
 Quantity
 
-Part Number (A- format only)
+Type (BAG LABEL ETC. Rule Based on Mined Excel Sheets)
+
+Part Number
 
 Description (cleaned)
 
@@ -28,14 +30,16 @@ Right-column Mfg# bleed
 OCR glyph noise ($ → S, £ → L, etc.)
 
 Outputs:
+Unknown Part #'s (Checked against rules)
 
 Clean .xlsx file using openpyxl
 
-### CLI usage:
+### GUI usage:
 
 ```bash
-python parser.py <pdf_path>
+python parser_gui.py
 ```
+Drag PDF onto GUI and hit "Run Parser"
 ## 📂 Example
 
 Input line (raw PDF):
@@ -66,7 +70,7 @@ source .venv/bin/activate
 3. Install dependencies
 pip install -r requirements.txt
 ## 📋 Usage
-python parser.py "path/to/ReceivingPO.pdf"
+python parser_gui.py -> Drag PDF onto GUI
 
 Output:
 
@@ -102,8 +106,6 @@ Writes structured rows using openpyxl.
 
 ## ⚠️ Assumptions
 
-Only parts starting with A- are valid items.
-
 PDFs must contain a readable text layer.
 
 Handwritten scans are not guaranteed to extract correctly.
@@ -115,13 +117,13 @@ Best results come from scanning before documents are written on.
 Phase 1 – Core Extraction: ✅ Complete
 Stable extraction for printed warehouse documents.
 Phase 2:
-CSV rules override layer (SOON)
+CSV rules override layer ✅ Complete
 
 OCR fallback for image-only PDFs
 
-Historical part duplication detection (SOON)
+Historical part duplication detection ✅ Complete
 
-Web UI wrapper
+GUI ✅ Complete
 
 ## 🔒 Git Policy
 
@@ -142,6 +144,10 @@ Only source code and config are versioned.
 pdfplumber
 
 openpyxl
+
+pandas
+
+pyside6
 
 ## 🏗️ Architecture Philosophy
 
