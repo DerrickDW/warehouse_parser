@@ -77,7 +77,8 @@ def load_part_corrections(csv_path: Path) -> dict[str, str]:
         print(f"[WARN] corrections file not found: {csv_path} (corrections disabled)")
         return {}
 
-    df = pd.read_csv(csv_path)
+    df = pd.read_csv(csv_path, encoding="utf-8-sig")
+    df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
     if not {"bad_part", "good_part"}.issubset(df.columns):
         print(f"[WARN] {csv_path} must have columns bad_part,good_part (corrections disabled)")
         return {}
@@ -97,7 +98,8 @@ def load_valid_parts(csv_path: Path) -> set[str]:
         print(f"[WARN] valid parts file not found: {csv_path} (validation disabled)")
         return set()
 
-    df = pd.read_csv(csv_path)
+    df = pd.read_csv(csv_path, encoding="utf-8-sig")
+    df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
     if "part_number" not in df.columns:
         print(f"[WARN] {csv_path} missing 'part_number' column (validation disabled)")
         return set()
@@ -120,6 +122,49 @@ def load_valid_parts(csv_path: Path) -> set[str]:
     parts.discard("")
     print(f"[OK] Loaded {len(parts)} valid part variants from {csv_path}")
     return parts
+
+def load_duplicate_rules(rules_dir: Path) -> dict[str, list[str]]:
+    """
+    Merge:
+      - duplicate_parts_expanded.csv   (mined)
+      - duplicate_parts_manual.csv     (GUI/manual overrides)
+
+    Expected CSV format:
+      part_number,type
+      A-RE526570,B
+      A-RE526570,LBL
+    """
+    dup_map: dict[str, set[str]] = {}
+
+    for filename in ["duplicate_parts_expanded.csv", "duplicate_parts_manual.csv"]:
+        path = rules_dir / filename
+        if not path.exists():
+            continue
+
+        try:
+            df = pd.read_csv(path)
+        except Exception as e:
+            print(f"[WARN] Failed reading duplicate rules file {path}: {e}")
+            continue
+
+        df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
+        required = {"part_number", "type"}
+        if not required.issubset(df.columns):
+            print(f"[WARN] {path.name} must contain columns: part_number,type")
+            continue
+
+        for _, r in df.iterrows():
+            part = normalize_part_for_validation(r.get("part_number"))
+            typ = str(r.get("type") or "").strip().upper()
+
+            if not part or not typ:
+                continue
+
+            dup_map.setdefault(part, set()).add(typ)
+
+    final_map = {part: sorted(types) for part, types in dup_map.items()}
+    print(f"[OK] Loaded duplicate rules for {len(final_map)} parts")
+    return final_map
 
 def write_unknown_parts_csv(unknown_rows: list[dict], out_path: Path):
     if not unknown_rows:
@@ -150,6 +195,31 @@ def write_unknown_parts_csv(unknown_rows: list[dict], out_path: Path):
             w.writerow({h: r.get(h, "") for h in headers})
 
     print(f"[WARN] Unknown parts exported: {out_path} ({len(deduped)} unique)")
+    
+# NEW HELPER
+def write_correction_audit_csv(audit_rows: list[dict], out_path: Path):
+    if not audit_rows:
+        print("[OK] No correction audit rows to write.")
+        return
+
+    headers = [
+        "part_number_before_correction",
+        "part_number_final",
+        "correction_applied",
+        "confidence",
+        "confidence_reason",
+        "po",
+        "source_pdf",
+        "raw_line",
+    ]
+
+    with out_path.open("w", newline="", encoding="utf-8") as f:
+        w = csv.DictWriter(f, fieldnames=headers)
+        w.writeheader()
+        for r in audit_rows:
+            w.writerow({h: r.get(h, "") for h in headers})
+
+    print(f"[OK] Correction audit exported: {out_path} ({len(audit_rows)} rows)")
 
 def clean_desc(desc: str) -> str:
     d = (desc or "").strip()
@@ -229,7 +299,16 @@ def normalize_item_token(tok: str) -> str:
     return t
 
 
-def extract_items(page_text: str, valid_parts: set[str], corrections: dict[str, str], unknown_parts: list, po: str, source_pdf: str):
+def extract_items(
+    page_text: str,
+    valid_parts: set[str],
+    corrections: dict[str, str],
+    duplicate_rules: dict[str, list[str]],
+    unknown_parts: list,
+    correction_audit: list,
+    po: str,
+    source_pdf: str,
+):
     rows = []
     if not page_text:
         return rows
@@ -258,9 +337,7 @@ def extract_items(page_text: str, valid_parts: set[str], corrections: dict[str, 
         if corrections and corrected_part_norm in corrections:
             corrected_part_norm = corrections[corrected_part_norm]
 
-        # IMPORTANT: use corrected part for Excel output too (keep description!)
-        part_for_output = corrected_part_norm  # this is like "A-H135423"
-        part_display = f"{part_for_output} ({desc})" if desc else part_for_output
+        correction_applied = corrected_part_norm != original_part_norm
 
         # try both forms (A-XXX and XXX)
         part_candidates = {corrected_part_norm}
@@ -269,8 +346,24 @@ def extract_items(page_text: str, valid_parts: set[str], corrections: dict[str, 
         else:
             part_candidates.add("A-" + corrected_part_norm)
 
+        is_valid = any(p in valid_parts for p in part_candidates) if valid_parts else True
+
+        if is_valid and not correction_applied:
+            confidence = "high"
+            confidence_reason = "exact_valid_match"
+        elif is_valid and correction_applied:
+            confidence = "medium"
+            confidence_reason = "corrected_by_rule"
+        else:
+            confidence = "low"
+            confidence_reason = "not_in_valid_parts"
+
+        # IMPORTANT: use corrected part for Excel output too (keep description!)
+        part_for_output = corrected_part_norm
+        part_display = f"{part_for_output} ({desc})" if desc else part_for_output
+
         # log unknowns (but still export normal output row)
-        if valid_parts and not any(p in valid_parts for p in part_candidates):
+        if valid_parts and not is_valid:
             unknown_parts.append({
                 "part_number_norm": corrected_part_norm,
                 "part_number_before_correction": original_part_norm,
@@ -280,19 +373,49 @@ def extract_items(page_text: str, valid_parts: set[str], corrections: dict[str, 
                 "raw_line": line.strip(),
             })
 
-        if DEBUG:
-            print("ITEM:", qty, part_for_output, "|", desc)
+        # audit every parsed item
+        correction_audit.append({
+            "part_number_before_correction": original_part_norm,
+            "part_number_final": corrected_part_norm,
+            "correction_applied": "yes" if correction_applied else "no",
+            "confidence": confidence,
+            "confidence_reason": confidence_reason,
+            "po": po or "",
+            "source_pdf": source_pdf or "",
+            "raw_line": line.strip(),
+        })
 
-        rows.append(
-            {
-                "Amount": qty,
-                "Type": "",
-                "Part #": part_display,   # KEEP (DESC) in output
-                "P.O. Number": "",
-                "Notes": "",
-                "Boxes/PC": "",
-            }
-        )
+        if DEBUG and corrected_part_norm in duplicate_rules:
+            print(f"DUPLICATE RULE: {corrected_part_norm} -> {duplicate_rules[corrected_part_norm]}")
+
+        if DEBUG:
+            print("ITEM:", qty, part_for_output, "|", desc, "|", confidence, confidence_reason)
+
+        output_types = duplicate_rules.get(corrected_part_norm, [])
+
+        if output_types:
+            for output_type in output_types:
+                rows.append(
+                    {
+                        "Amount": qty,
+                        "Type": output_type,
+                        "Part #": part_display,
+                        "P.O. Number": "",
+                        "Notes": confidence_reason if confidence != "high" else "",
+                        "Boxes/PC": "",
+                    }
+                )
+        else:
+            rows.append(
+                {
+                    "Amount": qty,
+                    "Type": "",
+                    "Part #": part_display,
+                    "P.O. Number": "",
+                    "Notes": confidence_reason if confidence != "high" else "",
+                    "Boxes/PC": "",
+                }
+            )
 
     return rows
 
@@ -325,7 +448,9 @@ def main():
     rules_dir = Path(__file__).resolve().parent / "Rules"  # change to wherever your mined CSVs live
     valid_parts = load_valid_parts(rules_dir / "valid_part_numbers.csv")
     corrections = load_part_corrections(rules_dir / "part_corrections.csv")
+    duplicate_rules = load_duplicate_rules(rules_dir)
     unknown_parts = []
+    correction_audit = []
 
     with pdfplumber.open(pdf_path) as pdf:
         for page in pdf.pages:
@@ -336,7 +461,9 @@ def main():
                 text,
                 valid_parts=valid_parts,
                 corrections=corrections,
+                duplicate_rules=duplicate_rules,
                 unknown_parts=unknown_parts,
+                correction_audit=correction_audit,
                 po=po,
                 source_pdf=pdf_path.name,
 )
@@ -348,6 +475,8 @@ def main():
     
     unknown_out = pdf_path.with_name(pdf_path.stem + "_unknown_parts.csv")
     write_unknown_parts_csv(unknown_parts, unknown_out)
+    audit_out = pdf_path.with_name(pdf_path.stem + "_correction_audit.csv")
+    write_correction_audit_csv(correction_audit, audit_out)
 
 
 if __name__ == "__main__":

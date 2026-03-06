@@ -6,6 +6,10 @@ This project follows a pragmatic versioning model where minor versions represent
 
 ---
 
+## V2.0
+  - Added GUI
+  - Added More Rules (Need to add some examples yet.)
+
 ## V1.6 Rule Engine Update
   - Added Rule Update that now adds what was done to the part and updated duplication logic as well as confidence scoring.
 
