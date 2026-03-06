@@ -5,7 +5,11 @@ mine_part_rules.py
 Mines historical Excel sheets to generate:
   1) valid_part_numbers.csv
   2) part_number_frequency.csv
-  3) duplicate_parts.csv  (parts that frequently appear with multiple types)
+  3) duplicate_parts.csv
+  4) duplicate_parts_expanded.csv
+  5) part_type_frequency.csv
+  6) duplicate_parts_confidence.csv
+  7) detected_columns_report.csv (optional)
 
 Assumptions:
 - Part number is in a "Part Number" / "Item" / "Part" type column (names vary)
@@ -56,7 +60,15 @@ def normalize_type(s: str) -> str:
         return ""
     s = HYPHENS_RE.sub("-", s)
     s = re.sub(r"\s+", "", s)
-    return s.upper()
+    s = s.upper()
+
+    # optional alias cleanup
+    aliases = {
+        "LABEL": "LBL",
+        "LBL.": "LBL",
+        "LAB": "LBL",
+    }
+    return aliases.get(s, s)
 
 
 def parse_part_cell(cell) -> str:
@@ -66,6 +78,7 @@ def parse_part_cell(cell) -> str:
     """
     if cell is None or (isinstance(cell, float) and pd.isna(cell)):
         return ""
+
     text = str(cell).strip()
     if not text:
         return ""
@@ -224,10 +237,13 @@ def mine_rules(
 ):
     files = iter_excel_files(input_dir, recursive=recursive)
 
-    # Overall row frequency:
+    # Overall row frequency
     part_row_counts = defaultdict(int)
 
-    # Duplicate detection (doc = file+sheet):
+    # Type-aware frequency
+    part_type_counts = defaultdict(lambda: defaultdict(int))
+
+    # Duplicate detection (doc = file+sheet)
     docs_with_part = defaultdict(int)
     docs_with_multitype = defaultdict(int)
     overall_types = defaultdict(set)
@@ -240,6 +256,7 @@ def mine_rules(
         wb = read_workbook_safely(fp)
         if not wb:
             continue
+
         processed_files += 1
 
         for sheet_name, df in wb.items():
@@ -279,10 +296,12 @@ def mine_rules(
                     if t:
                         doc_part_types[part].add(t)
                         overall_types[part].add(t)
+                        part_type_counts[part][t] += 1
 
             for part, typeset in doc_part_types.items():
                 if require_type_for_dupes and type_col is None:
                     continue
+
                 docs_with_part[part] += 1
                 if len(typeset) >= 2:
                     docs_with_multitype[part] += 1
@@ -290,9 +309,9 @@ def mine_rules(
     out_dir.mkdir(parents=True, exist_ok=True)
 
     # -----------------------------
-    # BUILD duplicate_parts "rows"
+    # BUILD duplicate_parts rows
     # -----------------------------
-    rows = []
+    dupe_rows = []
     for part, total in docs_with_part.items():
         multi = docs_with_multitype.get(part, 0)
         rate = (multi / total) if total else 0.0
@@ -300,7 +319,10 @@ def mine_rules(
         if (multi >= min_dupe_docs) or (rate >= min_dupe_rate):
             types = sorted(overall_types.get(part, set()))
             if len(types) >= 2:
-                rows.append({"part_number": part, "types": "+".join(types)})
+                dupe_rows.append({
+                    "part_number": part,
+                    "types": "+".join(types),
+                })
 
     # -----------------------------
     # VALID PARTS (append-aware)
@@ -310,11 +332,13 @@ def mine_rules(
 
     if append_mode and valid_path.exists():
         old = pd.read_csv(valid_path)
+        old.columns = [str(c).strip().lower().replace(" ", "_") for c in old.columns]
         if "part_number" in old.columns:
             old_parts = set(old["part_number"].astype(str).str.strip())
             valid_parts |= old_parts
 
-    pd.DataFrame({"part_number": sorted(valid_parts)}).to_csv(valid_path, index=False)
+    valid_df = pd.DataFrame({"part_number": sorted(valid_parts)})
+    valid_df.to_csv(valid_path, index=False)
 
     # -----------------------------
     # PART FREQUENCY (append-aware)
@@ -326,6 +350,8 @@ def mine_rules(
 
     if append_mode and freq_path.exists():
         old = pd.read_csv(freq_path)
+        old.columns = [str(c).strip().lower().replace(" ", "_") for c in old.columns]
+
         combined = pd.concat([old, freq_new], ignore_index=True)
         combined["part_number"] = combined["part_number"].astype(str).str.strip()
         combined["count"] = pd.to_numeric(combined["count"], errors="coerce").fillna(0).astype(int)
@@ -341,38 +367,156 @@ def mine_rules(
     freq_df.to_csv(freq_path, index=False)
 
     # -----------------------------
+    # PART TYPE FREQUENCY (append-aware)
+    # -----------------------------
+    ptf_rows = []
+    for part, type_map in part_type_counts.items():
+        total = sum(type_map.values())
+        for t, count in type_map.items():
+            pct = (count / total) if total else 0.0
+            ptf_rows.append({
+                "part_number": part,
+                "type": t,
+                "count": count,
+                "pct": round(pct, 4),
+            })
+
+    ptf_new = pd.DataFrame(ptf_rows)
+    ptf_path = out_dir / "part_type_frequency.csv"
+
+    if append_mode and ptf_path.exists():
+        old = pd.read_csv(ptf_path)
+        old.columns = [str(c).strip().lower().replace(" ", "_") for c in old.columns]
+
+        combined = pd.concat([old, ptf_new], ignore_index=True)
+        combined["part_number"] = combined["part_number"].astype(str).str.strip()
+        combined["type"] = combined["type"].astype(str).str.strip()
+        combined["count"] = pd.to_numeric(combined["count"], errors="coerce").fillna(0).astype(int)
+
+        grouped = (
+            combined.groupby(["part_number", "type"], as_index=False)["count"]
+            .sum()
+        )
+
+        totals = grouped.groupby("part_number")["count"].transform("sum")
+        grouped["pct"] = (grouped["count"] / totals).round(4)
+
+        ptf_df = grouped.sort_values(
+            ["part_number", "count", "type"],
+            ascending=[True, False, True],
+        )
+    else:
+        if not ptf_new.empty:
+            ptf_df = ptf_new.sort_values(
+                ["part_number", "count", "type"],
+                ascending=[True, False, True],
+            )
+        else:
+            ptf_df = pd.DataFrame(columns=["part_number", "type", "count", "pct"])
+
+    ptf_df.to_csv(ptf_path, index=False)
+
+    # -----------------------------
+    # DUPLICATE PARTS CONFIDENCE
+    # -----------------------------
+    confidence_rows = []
+
+    if not ptf_df.empty:
+        for part, group in ptf_df.groupby("part_number"):
+            if group["type"].nunique() < 2:
+                continue
+
+            ranked = group.sort_values(["count", "type"], ascending=[False, True]).reset_index(drop=True)
+            total_rows = int(ranked["count"].sum())
+
+            row = {
+                "part_number": part,
+                "types": "+".join(sorted(ranked["type"].astype(str).tolist())),
+                "total_rows": total_rows,
+                "top_type": ranked.loc[0, "type"],
+                "top_type_count": int(ranked.loc[0, "count"]),
+                "top_type_pct": float(ranked.loc[0, "pct"]),
+                "second_type": "",
+                "second_type_count": 0,
+                "second_type_pct": 0.0,
+            }
+
+            if len(ranked) > 1:
+                row["second_type"] = ranked.loc[1, "type"]
+                row["second_type_count"] = int(ranked.loc[1, "count"])
+                row["second_type_pct"] = float(ranked.loc[1, "pct"])
+
+            confidence_rows.append(row)
+
+    confidence_df = pd.DataFrame(confidence_rows)
+    confidence_path = out_dir / "duplicate_parts_confidence.csv"
+
+    if not confidence_df.empty:
+        confidence_df = confidence_df.sort_values(
+            ["total_rows", "part_number"],
+            ascending=[False, True],
+        )
+    else:
+        confidence_df = pd.DataFrame(columns=[
+            "part_number",
+            "types",
+            "total_rows",
+            "top_type",
+            "top_type_count",
+            "top_type_pct",
+            "second_type",
+            "second_type_count",
+            "second_type_pct",
+        ])
+
+    confidence_df.to_csv(confidence_path, index=False)
+
+    # -----------------------------
     # DUPLICATE PARTS (append-aware)
     # -----------------------------
-    dupe_new = pd.DataFrame(rows)
+    dupe_new = pd.DataFrame(dupe_rows)
     dupe_path = out_dir / "duplicate_parts.csv"
 
     if append_mode and dupe_path.exists():
         old = pd.read_csv(dupe_path)
+        old.columns = [str(c).strip().lower().replace(" ", "_") for c in old.columns]
+
         combined = pd.concat([old, dupe_new], ignore_index=True)
 
-        # merge type sets per part_number
         merged: dict[str, set[str]] = {}
         for _, r in combined.iterrows():
             p = normalize_part_number(r.get("part_number"))
             if not p:
                 continue
+
             types_raw = str(r.get("types") or "")
             tset = {normalize_type(t) for t in types_raw.split("+") if normalize_type(t)}
             if not tset:
                 continue
+
             merged.setdefault(p, set()).update(tset)
 
-        final_rows = [{"part_number": p, "types": "+".join(sorted(ts))} for p, ts in merged.items()]
-        dupe_df = pd.DataFrame(final_rows).sort_values("part_number")
+        final_rows = [
+            {"part_number": p, "types": "+".join(sorted(ts))}
+            for p, ts in merged.items()
+        ]
+
+        dupe_df = pd.DataFrame(final_rows)
+        if not dupe_df.empty:
+            dupe_df = dupe_df.sort_values("part_number")
+        else:
+            dupe_df = pd.DataFrame(columns=["part_number", "types"])
     else:
-        dupe_df = dupe_new.sort_values("part_number") if not dupe_new.empty else pd.DataFrame(columns=["part_number", "types"])
+        if not dupe_new.empty:
+            dupe_df = dupe_new.sort_values("part_number")
+        else:
+            dupe_df = pd.DataFrame(columns=["part_number", "types"])
 
     dupe_df.to_csv(dupe_path, index=False)
-    
-    # -----------------------------
-# EXPANDED DUPLICATE RULES
-# -----------------------------
 
+    # -----------------------------
+    # EXPANDED DUPLICATE RULES
+    # -----------------------------
     expanded_rows = []
 
     for _, r in dupe_df.iterrows():
@@ -383,25 +527,35 @@ def mine_rules(
             if t:
                 expanded_rows.append({
                     "part_number": part,
-                    "type": t
+                    "type": t,
                 })
 
     expanded_df = pd.DataFrame(expanded_rows)
+    expanded_path = out_dir / "duplicate_parts_expanded.csv"
 
-    expanded_df = expanded_df.sort_values(["part_number", "type"])
+    if not expanded_df.empty:
+        expanded_df = expanded_df.sort_values(["part_number", "type"])
+    else:
+        expanded_df = pd.DataFrame(columns=["part_number", "type"])
 
-    expanded_df.to_csv(out_dir / "duplicate_parts_expanded.csv", index=False)
+    expanded_df.to_csv(expanded_path, index=False)
 
+    # -----------------------------
     # Optional mapping report
+    # -----------------------------
     if write_mapping_report:
-        pd.DataFrame(mapping_rows).to_csv(out_dir / "detected_columns_report.csv", index=False)
+        mapping_path = out_dir / "detected_columns_report.csv"
+        pd.DataFrame(mapping_rows).to_csv(mapping_path, index=False)
 
     print("Done.")
     print(f"Files scanned: {len(files)} | Files processed: {processed_files} | Docs (file+sheet) analyzed: {total_docs}")
     print(f"Unique parts found (this run + append): {len(valid_parts)}")
     print(f"Wrote: {valid_path}")
     print(f"Wrote: {freq_path}")
+    print(f"Wrote: {ptf_path}")
+    print(f"Wrote: {confidence_path}")
     print(f"Wrote: {dupe_path}")
+    print(f"Wrote: {expanded_path}")
     if write_mapping_report:
         print(f"Wrote: {out_dir / 'detected_columns_report.csv'}")
 
@@ -413,17 +567,34 @@ def main():
     ap.add_argument("--recursive", action="store_true", help="Scan subdirectories")
     ap.add_argument("--min-part-len", type=int, default=4, help="Ignore very short tokens (default: 4)")
 
-    ap.add_argument("--min-dupe-docs", type=int, default=3,
-                    help="Min docs with >=2 types to flag duplicates (default: 3)")
-    ap.add_argument("--min-dupe-rate", type=float, default=0.30,
-                    help="Min fraction of docs with >=2 types to flag duplicates (default: 0.30)")
+    ap.add_argument(
+        "--min-dupe-docs",
+        type=int,
+        default=3,
+        help="Min docs with >=2 types to flag duplicates (default: 3)",
+    )
+    ap.add_argument(
+        "--min-dupe-rate",
+        type=float,
+        default=0.30,
+        help="Min fraction of docs with >=2 types to flag duplicates (default: 0.30)",
+    )
 
-    ap.add_argument("--require-type-for-dupes", action="store_true",
-                    help="If set, sheets without a detected Type column won't count toward duplicate stats.")
-    ap.add_argument("--mapping-report", action="store_true",
-                    help="Write detected_columns_report.csv to debug templates / header variations.")
-    ap.add_argument("--append-mode", action="store_true",
-                    help="Append/merge results with existing CSVs instead of overwriting.")
+    ap.add_argument(
+        "--require-type-for-dupes",
+        action="store_true",
+        help="If set, sheets without a detected Type column won't count toward duplicate stats.",
+    )
+    ap.add_argument(
+        "--mapping-report",
+        action="store_true",
+        help="Write detected_columns_report.csv to debug templates / header variations.",
+    )
+    ap.add_argument(
+        "--append-mode",
+        action="store_true",
+        help="Append/merge results with existing CSVs instead of overwriting.",
+    )
 
     args = ap.parse_args()
 
