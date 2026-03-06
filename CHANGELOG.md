@@ -166,8 +166,8 @@ Initial prototype for automating warehouse logistics document transcription.
 ### Planned Features
 
 - Intelligent fuzzy correction using valid part corpus
-- Parser GUI wrapper for drag-and-drop operation
-- Rule mining integration pipeline
+- Parser GUI wrapper for drag-and-drop operation ✅ Complete
+- Rule mining integration pipeline ✅ Complete
 
 ---
 
