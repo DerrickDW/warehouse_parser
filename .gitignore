@@ -47,7 +47,9 @@ Thumbs.db
 *.txt
 *.csv
 TODO.md
-
+scraper.py
+config.json
+unknown_pages.txt
 # If you want to keep sample test PDFs, create:
 # /samples/
 # and remove the *.pdf ignore above.
