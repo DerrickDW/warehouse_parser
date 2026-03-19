@@ -46,6 +46,7 @@ Thumbs.db
 *_output.xlsx
 *.txt
 *.csv
+TODO.md
 
 # If you want to keep sample test PDFs, create:
 # /samples/
