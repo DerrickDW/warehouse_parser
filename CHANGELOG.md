@@ -10,6 +10,7 @@ This project follows a pragmatic versioning model where minor versions represent
   - Added GUI
   - Added More Rules (Need to add some examples yet.)
   - Added (Description) editing rules to parser and GUI
+  - Fixed bug that made GUI not show Excel preview
 
 ## V1.6 Rule Engine Update
   - Added Rule Update that now adds what was done to the part and updated duplication logic as well as confidence scoring.
