@@ -505,7 +505,9 @@ def main():
                 r["P.O. Number"] = po
             all_rows.extend(items)
 
-    write_output(all_rows, pdf_path.stem + "_output.xlsx")
+    output_path = pdf_path.parent / f"{pdf_path.stem}_output.xlsx"
+
+    write_output(all_rows, output_path)
     
     unknown_out = pdf_path.with_name(pdf_path.stem + "_unknown_parts.csv")
     write_unknown_parts_csv(unknown_parts, unknown_out)

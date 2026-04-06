@@ -60,3 +60,4 @@ unknown_pages.txt
 *.tmp
 *.bak
 parser.py
+/bible2.jsonl
