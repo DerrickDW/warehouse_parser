@@ -6,7 +6,7 @@ This project follows a pragmatic versioning model where minor versions represent
 
 ---
 ## V2.0.1
- - Added jsonl to csv converter for ruleset conversion to standard format
+ - Added jsonl to csv converter for ruleset conversion to standard format 
 ## V2.0
   - Added GUI
   - Added More Rules (Need to add some examples yet.)

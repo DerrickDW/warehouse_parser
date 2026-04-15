@@ -93,6 +93,31 @@ def load_part_corrections(csv_path: Path) -> dict[str, str]:
     print(f"[OK] Loaded {len(mapping)} corrections from {csv_path}")
     return mapping
 
+def load_scraped_parts(csv_path: Path) -> dict[str, str]:
+    if not csv_path.exists():
+        print(f"[WARN] scraped parts file not found: {csv_path} (validation disabled)")
+        return {}
+
+    df = pd.read_csv(csv_path, encoding="utf-8-sig")
+    df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
+    if not {"Part Number", "Description"}.issubset(df.columns):
+        print(f"[WARN] scraped file missing required columns")
+        return {}
+
+    mapping = {}
+
+    for _, r in df.iterrows():
+        part = normalize_part_for_validation(r.get("Part Number"))
+        desc = str(r.get("Description") or "").strip()
+
+        if not part:
+            continue
+
+        if desc:
+            mapping[part] = desc
+
+    print(f"[OK] Loaded {len(mapping)} scraped parts w/ descriptions")
+    return mapping
 def load_valid_parts(csv_path: Path) -> set[str]:
     if not csv_path.exists():
         print(f"[WARN] valid parts file not found: {csv_path} (validation disabled)")
@@ -325,6 +350,8 @@ def normalize_item_token(tok: str) -> str:
 
 def extract_items(
     page_text: str,
+    scraped_parts: dict[str, str],
+    scraped_desc: dict[str, str],
     valid_parts: set[str],
     corrections: dict[str, str],
     duplicate_rules: dict[str, list[str]],
@@ -361,6 +388,8 @@ def extract_items(
         corrected_part_norm = original_part_norm
         if corrections and corrected_part_norm in corrections:
             corrected_part_norm = corrections[corrected_part_norm]
+
+        # TODO: ADD SCRAPED PART RULES
         # start with cleaned OCR description
         final_desc = desc
         
@@ -480,6 +509,7 @@ def main():
     rules_dir = Path(__file__).resolve().parent / "Rules"  # change to wherever your mined CSVs live
     valid_parts = load_valid_parts(rules_dir / "valid_part_numbers.csv")
     corrections = load_part_corrections(rules_dir / "part_corrections.csv")
+    scraped_parts = load_scraped_parts(rules_dir / "holy_bible.csv")
     duplicate_rules = load_duplicate_rules(rules_dir)
     description_overrides = load_description_overrides(rules_dir / "description_overrides.csv")
     unknown_parts = []
@@ -493,6 +523,9 @@ def main():
             items = extract_items(
                 text,
                 valid_parts=valid_parts,
+                scraped_parts=scraped_parts,
+                #TODO: FIX SCRAPED_DESC
+                scraped_desc=scraped_desc,
                 corrections=corrections,
                 duplicate_rules=duplicate_rules,
                 description_overrides=description_overrides,
