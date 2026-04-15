@@ -5,7 +5,8 @@ All notable changes to the Warehouse PDF Parser project will be documented in th
 This project follows a pragmatic versioning model where minor versions represent meaningful improvements to parsing accuracy, rule generation, and validation layers.
 
 ---
-
+## V2.0.1
+ - Added jsonl to csv converter for ruleset conversion to standard format
 ## V2.0
   - Added GUI
   - Added More Rules (Need to add some examples yet.)
