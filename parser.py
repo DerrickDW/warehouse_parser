@@ -93,31 +93,31 @@ def load_part_corrections(csv_path: Path) -> dict[str, str]:
     print(f"[OK] Loaded {len(mapping)} corrections from {csv_path}")
     return mapping
 
-###def load_scraped_parts(csv_path: Path) -> dict[str, str]:
+
+def load_scraped_parts(csv_path: Path) -> dict[str, str]:
     if not csv_path.exists():
-        print(f"[WARN] scraped parts file not found: {csv_path} (validation disabled)")
+        print(f"[WARN] scraped parts file not found: {csv_path} (scraped catalog disabled)")
         return {}
 
     df = pd.read_csv(csv_path, encoding="utf-8-sig")
     df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
     if not {"part_number", "description"}.issubset(df.columns):
-        print(f"[WARN] scraped file missing required columns")
+        print(f"[WARN] {csv_path} must have columns part_number,description (scraped catalog disabled)")
         return {}
 
     mapping = {}
-
     for _, r in df.iterrows():
         scraped_part = normalize_part_for_validation(r.get("part_number"))
         scraped_desc = str(r.get("description") or "").strip()
-
         if not scraped_part:
             continue
-
         if scraped_desc:
             mapping[scraped_part] = scraped_desc
 
-    print(f"[OK] Loaded {len(mapping)} scraped parts w/ descriptions")
-    return mapping###
+    print(f"[OK] Loaded {len(mapping)} scraped parts w/ descriptions from {csv_path}")
+    return mapping
+
+
 def load_valid_parts(csv_path: Path) -> set[str]:
     if not csv_path.exists():
         print(f"[WARN] valid parts file not found: {csv_path} (validation disabled)")
@@ -350,10 +350,9 @@ def normalize_item_token(tok: str) -> str:
 
 def extract_items(
     page_text: str,
-    #scraped_parts: dict[str, str],
-    #scraped_desc: dict[str, str],
     valid_parts: set[str],
     corrections: dict[str, str],
+    scraped_parts: dict[str, str],
     duplicate_rules: dict[str, list[str]],
     description_overrides: dict[str, str],
     unknown_parts: list,
@@ -389,13 +388,27 @@ def extract_items(
         if corrections and corrected_part_norm in corrections:
             corrected_part_norm = corrections[corrected_part_norm]
 
-        # TODO: ADD SCRAPED PART RULES
-        # start with cleaned OCR description
+        part_candidates = {corrected_part_norm}
+        if corrected_part_norm.startswith("A-") and len(corrected_part_norm) > 2:
+            part_candidates.add(corrected_part_norm[2:])
+        else:
+            part_candidates.add("A-" + corrected_part_norm)
+
+        scraped_hit = False
+        scraped_desc = ""
+        if scraped_parts:
+            for p in part_candidates:
+                if p in scraped_parts:
+                    scraped_hit = True
+                    scraped_desc = scraped_parts[p]
+                    break
+
+        # OCR description → CSV overrides → scraped wins on conflict
         final_desc = desc
-        
-        #override description by correct part number, if configured
         if description_overrides and corrected_part_norm in description_overrides:
             final_desc = description_overrides[corrected_part_norm]
+        if scraped_hit and scraped_desc:
+            final_desc = scraped_desc
         
         #IMPORTANT: use corrected part for Excel output too
         part_for_output = corrected_part_norm
@@ -403,24 +416,23 @@ def extract_items(
 
         correction_applied = corrected_part_norm != original_part_norm
 
-        # try both forms (A-XXX and XXX)
-        part_candidates = {corrected_part_norm}
-        if corrected_part_norm.startswith("A-") and len(corrected_part_norm) > 2:
-            part_candidates.add(corrected_part_norm[2:])
-        else:
-            part_candidates.add("A-" + corrected_part_norm)
+        in_valid_parts = any(p in valid_parts for p in part_candidates) if valid_parts else True
+        is_valid = (
+            in_valid_parts or (bool(scraped_parts) and scraped_hit) if valid_parts else True
+        )
 
-        is_valid = any(p in valid_parts for p in part_candidates) if valid_parts else True
-
-        if is_valid and not correction_applied:
+        if scraped_hit:
+            confidence = "high"
+            confidence_reason = "scraped_catalog_match"
+        elif in_valid_parts and not correction_applied:
             confidence = "high"
             confidence_reason = "exact_valid_match"
-        elif is_valid and correction_applied:
-            confidence = "medium"
+        elif correction_applied and is_valid:
+            confidence = "high"
             confidence_reason = "corrected_by_rule"
         else:
             confidence = "low"
-            confidence_reason = "not_in_valid_parts"
+            confidence_reason = "not_in_valid_or_scraped_catalog"
 
         # log unknowns (but still export normal output row)
         if valid_parts and not is_valid:
@@ -509,7 +521,7 @@ def main():
     rules_dir = Path(__file__).resolve().parent / "Rules"  # change to wherever your mined CSVs live
     valid_parts = load_valid_parts(rules_dir / "valid_part_numbers.csv")
     corrections = load_part_corrections(rules_dir / "part_corrections.csv")
-    #scraped_parts = load_scraped_parts(rules_dir / "holy_bible.csv")
+    scraped_parts = load_scraped_parts(rules_dir / "holybible.csv")
     duplicate_rules = load_duplicate_rules(rules_dir)
     description_overrides = load_description_overrides(rules_dir / "description_overrides.csv")
     unknown_parts = []
@@ -523,10 +535,8 @@ def main():
             items = extract_items(
                 text,
                 valid_parts=valid_parts,
-                #scraped_parts=scraped_parts,
-                #TODO: FIX SCRAPED_DESC
-                #scraped_desc=scraped_desc,
                 corrections=corrections,
+                scraped_parts=scraped_parts,
                 duplicate_rules=duplicate_rules,
                 description_overrides=description_overrides,
                 unknown_parts=unknown_parts,
