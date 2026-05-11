@@ -101,14 +101,14 @@ def load_scraped_parts(csv_path: Path) -> dict[str, str]:
 
     df = pd.read_csv(csv_path, encoding="utf-8-sig")
     df.columns = [str(c).strip().lower().replace(" ", "_") for c in df.columns]
-    if not {"part_number", "description"}.issubset(df.columns):
-        print(f"[WARN] {csv_path} must have columns part_number,description (scraped catalog disabled)")
+    if not {"part_number", "part_description"}.issubset(df.columns):
+        print(f"[WARN] {csv_path} must have columns part_number,part_description (scraped catalog disabled)")
         return {}
 
     mapping = {}
     for _, r in df.iterrows():
         scraped_part = normalize_part_for_validation(r.get("part_number"))
-        scraped_desc = str(r.get("description") or "").strip()
+        scraped_desc = str(r.get("part_description") or "").strip()
         if not scraped_part:
             continue
         if scraped_desc:
@@ -521,7 +521,7 @@ def main():
     rules_dir = Path(__file__).resolve().parent / "Rules"  # change to wherever your mined CSVs live
     valid_parts = load_valid_parts(rules_dir / "valid_part_numbers.csv")
     corrections = load_part_corrections(rules_dir / "part_corrections.csv")
-    scraped_parts = load_scraped_parts(rules_dir / "holybible.csv")
+    scraped_parts = load_scraped_parts(rules_dir / "holy_bible.csv")
     duplicate_rules = load_duplicate_rules(rules_dir)
     description_overrides = load_description_overrides(rules_dir / "description_overrides.csv")
     unknown_parts = []
