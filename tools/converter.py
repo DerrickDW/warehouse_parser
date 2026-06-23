@@ -36,7 +36,7 @@ def jsonl_to_csv(input_path, out_path):
     print(f"[OK] Build scraped CSV with {len(seen)} unique parts")
 
 if __name__ == "__main__":
-    input_path = Path("Rules") / "YOUR_JSONL_HERE"
-    out_path = Path("Rules") / "YOUR_CSV_HERE"
+    input_path = Path("../Rules") / "YOUR_JSONL_HERE"
+    out_path = Path("../Rules") / "YOUR_CSV_HERE"
     print("ABOUT TO CONVERT")
     jsonl_to_csv(input_path, out_path)
